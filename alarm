@@ -1,0 +1,22 @@
+!/bin/bash
+
+target_time=$1
+sound_file="/home/Mathew/Music/alarm_sound.mp3" ## replace this with a path to your audio file
+while true; do
+	current_time=$(date "+%H:%M")
+	if [[ "$current_time" == "$target_time" ]]; then
+		paplay "$sound_file" &
+		response=$(dunstify -t 0 -r 1234 "Alarm: It's $target_time!" \
+			--action="off,Off" --action="snooze,Snooze")
+		if [[ "$response" == "off" ]]; then
+			break
+		elif [[ "$response" == "snooze" ]]; then
+			target_time=$(date -d "$target_time + 5 minutes" "+%H:%M")
+		else
+			current_time=$(date "+%H:%M")
+			target_time=$current_time
+			sleep 1
+		fi
+	fi
+
+done &
