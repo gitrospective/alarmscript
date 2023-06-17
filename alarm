@@ -1,22 +1,88 @@
-!/bin/bash
+#!/bin/bash
 
-target_time=$1
-sound_file="/home/Mathew/Music/alarm_sound.mp3" ## replace this with a path to your audio file
-while true; do
-	current_time=$(date "+%H:%M")
-	if [[ "$current_time" == "$target_time" ]]; then
-		paplay "$sound_file" &
-		response=$(dunstify -t 0 -r 1234 "Alarm: It's $target_time!" \
-			--action="off,Off" --action="snooze,Snooze")
-		if [[ "$response" == "off" ]]; then
-			break
-		elif [[ "$response" == "snooze" ]]; then
-			target_time=$(date -d "$target_time + 5 minutes" "+%H:%M")
-		else
-			current_time=$(date "+%H:%M")
-			target_time=$current_time
-			sleep 1
-		fi
-	fi
+alarm_file="/usr/local/bin/clock/alarms.txt"
+sound_file="/usr/local/bin/clock/alarm_sound.mp3"
 
-done &
+set_alarm() {
+    echo "$1" >> "$alarm_file"
+    echo "Alarm Set: $1"
+}
+
+cancel_alarm() {
+    if [[ -f "$alarm_file" ]]; then
+        if [[ $# -eq 0 ]]; then
+            rm -f "$alarm_file"
+            echo "All Alarms Canceled"
+        else
+            if [[ "$1" == "snooze" ]]; then
+                snooze_time=$(date -d "+5 minutes" "+%H:%M")
+                echo "$snooze_time" >> "$alarm_file"
+                echo "Alarm Snoozed: $snooze_time"
+            else
+                while read -r line; do
+                    if [[ "$line" != "$1" ]]; then
+                        echo "$line" >> "$alarm_file.tmp"
+                    fi
+                done < "$alarm_file"
+
+                mv "$alarm_file.tmp" "$alarm_file"
+                echo "Alarm Canceled: $1"
+            fi
+        fi
+    else
+        echo "No Alarms Found"
+    fi
+}
+
+check_alarms() {
+    while true; do
+        current_time=$(date "+%H:%M")
+        while read -r alarm_time; do
+            if [[ "$current_time" == "$alarm_time" ]]; then
+                paplay "$sound_file" &
+                response=$(dunstify -t 0 -r 1234 "Alarm: It's $alarm_time!" \
+                    --action="off,Off" --action="snooze,Snooze")
+                if [[ "$response" == "off" ]]; then
+                    cancel_alarm "$alarm_time"
+                    break
+                elif [[ "$response" == "snooze" ]]; then
+                    snooze_time=$(date -d "$alarm_time + 5 minutes" "+%H:%M")
+                    set_alarm "$snooze_time"
+                    break
+                else
+                    current_time=$(date "+%H:%M")
+                    sleep 1
+                fi
+            fi
+        done < "$alarm_file"
+
+        sleep 1
+    done &
+}
+
+if [[ $# -eq 0 ]]; then
+    echo "Usage: alarm [set HH:MM | cancel [HH:MM]]"
+    exit 1
+fi
+
+if [[ $1 == "set" ]]; then
+    if [[ $# -ne 2 ]]; then
+        echo "Usage: alarm set HH:MM"
+        exit 1
+    fi
+    set_alarm "$2"
+elif [[ $1 == "cancel" ]]; then
+    if [[ $# -eq 1 ]]; then
+        cancel_alarm
+    elif [[ $# -eq 2 ]]; then
+        cancel_alarm "$2"
+    else
+        echo "Usage: alarm cancel [HH:MM]"
+        exit 1
+    fi
+else
+    echo "Usage: alarm [set HH:MM | cancel [HH:MM]]"
+    exit 1
+fi
+
+check_alarms
